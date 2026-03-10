@@ -367,16 +367,16 @@ Once the tag is pushed, the GitHub Actions workflow automatically:
 
 - Builds Docker images for multiple platforms (linux/amd64, linux/arm64)
 - Creates the following tags in GitHub Container Registry:
-  - `ghcr.io/basher83/zammad-mcp:1.0.0` (exact version)
-  - `ghcr.io/basher83/zammad-mcp:1.0` (minor version)
-  - `ghcr.io/basher83/zammad-mcp:1` (major version)
-  - `ghcr.io/basher83/zammad-mcp:latest` (if this is the latest release)
+  - `ghcr.io/LuckyBulgur/zammad-mcp:1.0.0` (exact version)
+  - `ghcr.io/LuckyBulgur/zammad-mcp:1.0` (minor version)
+  - `ghcr.io/LuckyBulgur/zammad-mcp:1` (major version)
+  - `ghcr.io/LuckyBulgur/zammad-mcp:latest` (if this is the latest release)
 
 #### 4. Create GitHub Release
 
 After the Docker images are built:
 
-1. Go to [Releases](https://github.com/basher83/Zammad-MCP/releases)
+1. Go to [Releases](https://github.com/LuckyBulgur/Zammad-MCP/releases)
 2. Click "Draft a new release"
 3. Select your tag (e.g., v1.0.0)
 4. Add release title and notes from CHANGELOG.md

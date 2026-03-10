@@ -417,7 +417,7 @@ def generate_sarif_report(report: SecurityReport) -> dict:
                     "driver": {
                         "name": "Zammad MCP Security Scanner",
                         "version": "1.0.0",
-                        "informationUri": "https://github.com/basher83/zammad-mcp",
+                        "informationUri": "https://github.com/LuckyBulgur/zammad-mcp",
                         "rules": [],
                     }
                 },

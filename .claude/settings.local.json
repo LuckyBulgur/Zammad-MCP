@@ -51,7 +51,8 @@
       "mcp__zammad__zammad_list_ticket_states",
       "mcp__zammad__zammad_list_ticket_priorities",
       "mcp__zammad__zammad_search_tickets",
-      "mcp__zammad__zammad_get_ticket"
+      "mcp__zammad__zammad_get_ticket",
+      "Bash(grep '^name = ' /Users/ugur/Desktop/Zammad-MCP/uv.lock | sed 's/^name = \"//' | sed 's/\"$//' | sort -u)"
     ],
     "deny": []
   },

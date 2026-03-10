@@ -1,5 +1,5 @@
 #!/bin/bash
-# Development quality check script following basher83 coding standards
+# Development quality check script following LuckyBulgur coding standards
 
 set -euo pipefail
 

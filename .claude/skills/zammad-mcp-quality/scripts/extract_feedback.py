@@ -160,7 +160,7 @@ def main():
     print("  gh pr view 97 --json reviews")
     print()
     print("  # Get comments from Code Rabbit")
-    print("  gh api repos/basher83/Zammad-MCP/pulls/97/comments")
+    print("  gh api repos/LuckyBulgur/Zammad-MCP/pulls/97/comments")
     print()
     print("=" * 60)
 

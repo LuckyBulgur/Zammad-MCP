@@ -14,7 +14,7 @@ command -v docker >/dev/null 2>&1 || { echo -e "${RED}Docker CLI not found – i
 
 # Configuration
 IMAGE_NAME="zammad-mcp"
-REGISTRY="ghcr.io/basher83"
+REGISTRY="ghcr.io/LuckyBulgur"
 VERSION="${1:-latest}"
 
 echo -e "${YELLOW}Building Docker image: ${REGISTRY}/${IMAGE_NAME}:${VERSION}${NC}"

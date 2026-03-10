@@ -14,7 +14,7 @@ updates:
       timezone: "Etc/UTC"
     open-pull-requests-limit: 10
     assignees:
-      - "basher83"
+      - "LuckyBulgur"
     commit-message:
       prefix: "deps"
       prefix-development: "deps-dev"

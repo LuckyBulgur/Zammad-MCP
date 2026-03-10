@@ -33,7 +33,7 @@ jobs:
       actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
     name: Codacy Security Scan
     runs-on: ubuntu-latest
-    if: github.repository == 'basher83/Zammad-MCP'
+    if: github.repository == 'LuckyBulgur/Zammad-MCP'
     steps:
       # Checkout the repository to the GitHub Actions runner
       - name: Checkout code
@@ -42,7 +42,7 @@ jobs:
       # Login to Docker Hub to avoid rate limits
       - name: Login to Docker Hub
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
-        if: github.repository == 'basher83/Zammad-MCP' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: github.repository == 'LuckyBulgur/Zammad-MCP' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -54,7 +54,7 @@ jobs:
         with:
           # Check https://github.com/codacy/codacy-analysis-cli#project-token to get your project token from your Codacy repository
           # You can also omit the token and run the tools that support default configurations
-          project-token: ${{ github.repository == 'basher83/Zammad-MCP' && secrets.CODACY_PROJECT_TOKEN || '' }}
+          project-token: ${{ github.repository == 'LuckyBulgur/Zammad-MCP' && secrets.CODACY_PROJECT_TOKEN || '' }}
           verbose: true
           output: results.sarif
           format: sarif

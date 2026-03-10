@@ -22,7 +22,7 @@ We take security vulnerabilities seriously. If you discover a security issue, pl
 
 Instead, please use one of these methods:
 
-- **GitHub Security Advisories** (Preferred): [Report a vulnerability](https://github.com/basher83/Zammad-MCP/security/advisories/new) via GitHub's private vulnerability reporting
+- **GitHub Security Advisories** (Preferred): [Report a vulnerability](https://github.com/LuckyBulgur/Zammad-MCP/security/advisories/new) via GitHub's private vulnerability reporting
 - **Email**: For urgent security matters, contact repository maintainers directly
 - **Encrypted Email**: For sensitive reports, use GPG encryption (key available on request)
 
@@ -91,7 +91,7 @@ ZAMMAD_HTTP_TOKEN=abc123token
   "mcpServers": {
     "zammad": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/basher83/zammad-mcp.git", "mcp-zammad"],
+      "args": ["--from", "git+https://github.com/LuckyBulgur/zammad-mcp.git", "mcp-zammad"],
       "env": {
         "ZAMMAD_URL": "https://your-instance.zammad.com/api/v1",
         "ZAMMAD_HTTP_TOKEN": "your-api-token"
@@ -255,7 +255,7 @@ uv run bandit -r mcp_zammad    # Static security analysis
 uv run safety check --output json  # Vulnerability database check
 
 # Docker image scanning
-docker scout cves ghcr.io/basher83/zammad-mcp:latest
+docker scout cves ghcr.io/LuckyBulgur/zammad-mcp:latest
 ```
 
 ## GitHub Actions Security
@@ -344,8 +344,8 @@ We use CVSS v3.1 for vulnerability scoring:
 
 For security-related questions or concerns:
 
-- **Security Issues**: [Report via GitHub Security Advisories](https://github.com/basher83/Zammad-MCP/security/advisories/new)
-- **General Security Questions**: [Create a GitHub Discussion](https://github.com/basher83/Zammad-MCP/discussions)
+- **Security Issues**: [Report via GitHub Security Advisories](https://github.com/LuckyBulgur/Zammad-MCP/security/advisories/new)
+- **General Security Questions**: [Create a GitHub Discussion](https://github.com/LuckyBulgur/Zammad-MCP/discussions)
 - **Urgent Security Matters**: Contact repository maintainers directly
 
 ## Acknowledgments

@@ -37,7 +37,7 @@ docker run -d \
   -e MCP_PORT=8000 \
   -e ZAMMAD_URL=https://instance.zammad.com/api/v1 \
   -e ZAMMAD_HTTP_TOKEN=your-token \
-  ghcr.io/basher83/zammad-mcp:latest
+  ghcr.io/LuckyBulgur/zammad-mcp:latest
 ```
 
 ## Production Deployment
@@ -112,7 +112,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=/opt/zammad-mcp
 EnvironmentFile=/opt/zammad-mcp/.env
-ExecStart=/usr/local/bin/uvx --from git+https://github.com/basher83/zammad-mcp.git mcp-zammad
+ExecStart=/usr/local/bin/uvx --from git+https://github.com/LuckyBulgur/zammad-mcp.git mcp-zammad
 Restart=always
 RestartSec=10
 
@@ -138,7 +138,7 @@ version: '3.8'
 
 services:
   zammad-mcp:
-    image: ghcr.io/basher83/zammad-mcp:latest
+    image: ghcr.io/LuckyBulgur/zammad-mcp:latest
     container_name: zammad-mcp
     restart: unless-stopped
     environment:
@@ -191,7 +191,7 @@ Task definition JSON:
   "family": "zammad-mcp",
   "containerDefinitions": [{
     "name": "zammad-mcp",
-    "image": "ghcr.io/basher83/zammad-mcp:latest",
+    "image": "ghcr.io/LuckyBulgur/zammad-mcp:latest",
     "environment": [
       {"name": "MCP_TRANSPORT", "value": "http"},
       {"name": "MCP_HOST", "value": "0.0.0.0"},

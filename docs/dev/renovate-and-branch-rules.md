@@ -1,6 +1,6 @@
 # Dependency & Branch Protection Strategy for `Zammad-MCP`
 
-This document describes how dependency updates and branch protection are configured for the [`basher83/Zammad-MCP`](https://github.com/basher83/Zammad-MCP) repository.
+This document describes how dependency updates and branch protection are configured for the [`LuckyBulgur/Zammad-MCP`](https://github.com/LuckyBulgur/Zammad-MCP) repository.
 
 It covers:
 
@@ -13,7 +13,7 @@ It covers:
 
 ## 1. Renovate Overview
 
-`Zammad-MCP` uses [Renovate](https://docs.renovatebot.com/) with a centralized configuration stored in [`basher83/renovate-config`](https://github.com/basher83/renovate-config).
+`Zammad-MCP` uses [Renovate](https://docs.renovatebot.com/) with a centralized configuration stored in [`LuckyBulgur/renovate-config`](https://github.com/LuckyBulgur/renovate-config).
 
 ### 1.1 Repo-level Renovate config
 
@@ -23,17 +23,17 @@ It covers:
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "local>basher83/renovate-config",
-    "local>basher83/renovate-config//presets/python-mcp.json",
-    "local>basher83/renovate-config//presets/github-actions-security.json",
-    "local>basher83/renovate-config//presets/docker.json"
+    "local>LuckyBulgur/renovate-config",
+    "local>LuckyBulgur/renovate-config//presets/python-mcp.json",
+    "local>LuckyBulgur/renovate-config//presets/github-actions-security.json",
+    "local>LuckyBulgur/renovate-config//presets/docker.json"
   ],
   "labels": [
     "dependencies",
     "renovate"
   ],
   "assignees": [
-    "basher83"
+    "LuckyBulgur"
   ],
   "commitMessagePrefix": "chore(deps):",
   "packageRules": [
@@ -53,13 +53,13 @@ It covers:
 
 Key points:
 
-- **Extends a central config** (`local>basher83/renovate-config`) plus three presets:
+- **Extends a central config** (`local>LuckyBulgur/renovate-config`) plus three presets:
   - `python-mcp.json` (Python & MCP‑specific behavior)
   - `github-actions-security.json` (GitHub Actions)
   - `docker.json` (Docker images)
 - All Renovate PRs:
   - Are labeled with `dependencies` and `renovate`.
-  - Are assigned to `@basher83`.
+  - Are assigned to `@LuckyBulgur`.
   - Use `chore(deps):` as the commit message prefix.
 - Extra repo‑specific rule:
   - **`zammad-py` major updates require explicit approval** in the Dependency Dashboard.
@@ -306,7 +306,7 @@ This gives a clear separation between:
 ## 6. How to Adjust This in Future
 
 - To make more things **auto‑merge**:
-  - Add/adjust `packageRules` with `automerge: true` in `basher83/renovate-config`.
+  - Add/adjust `packageRules` with `automerge: true` in `LuckyBulgur/renovate-config`.
 - To make certain areas **stricter**:
   - Add `dependencyDashboardApproval: true` or remove `automerge` for those dependencies.
 - To tighten branch safety:
