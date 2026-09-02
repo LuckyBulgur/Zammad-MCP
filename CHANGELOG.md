@@ -15,6 +15,7 @@
 ### 🐛 Bug Fixes
 
 - *(fork)* Count ticket statistics with Zammad's real state type ids (5 closed, 3/4 pending, 6/7 merged/removed)
+- *(fork)* Fetch complete state and priority lists; zammad_py returned only the first ten, so an eleventh state was missing from the statistics
 - Address CodeRabbit review feedback
 - Resolve Codacy D-series docstring violations in changed files
 - *(tests)* Add local fake Zammad server to HTTP integration fixture

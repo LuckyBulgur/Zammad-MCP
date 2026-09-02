@@ -446,7 +446,7 @@ class ZammadClient:
         Raises:
             requests.HTTPError: If the API request fails for a reason other than 403.
         """
-        response = self.api.session.get(f"{self.url}/groups", params={"per_page": 500})
+        response = self.api.session.get(f"{self.url}/groups", params={"per_page": self.FULL_LIST_PAGE_SIZE})
         if response.status_code != requests.codes.forbidden:
             response.raise_for_status()
             return list(response.json())
@@ -458,14 +458,19 @@ class ZammadClient:
         groups = list(assets.get("Group", {}).values())
         return sorted(groups, key=lambda group: int(group.get("id", 0)))
 
+    # zammad_py's ``all()`` returns one page of ten items by default. States and
+    # priorities are small, complete lists, so one page with a generous size fetches
+    # all of them; an eleventh state must not vanish from the statistics.
+    FULL_LIST_PAGE_SIZE = 500
+
     def get_ticket_states(self) -> list[dict[str, Any]]:
         """Get all ticket states."""
-        result = self.api.ticket_state.all()
+        result = self.api.ticket_state.all(filters={"per_page": self.FULL_LIST_PAGE_SIZE})
         return list(result)
 
     def get_ticket_priorities(self) -> list[dict[str, Any]]:
         """Get all ticket priorities."""
-        result = self.api.ticket_priority.all()
+        result = self.api.ticket_priority.all(filters={"per_page": self.FULL_LIST_PAGE_SIZE})
         return list(result)
 
     def get_current_user(self) -> dict[str, Any]:

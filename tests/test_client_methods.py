@@ -186,7 +186,7 @@ class TestZammadClientMethods:
 
         assert len(result) == 2
         assert result[0]["name"] == "new"
-        mock_instance.ticket_state.all.assert_called_once()
+        mock_instance.ticket_state.all.assert_called_once_with(filters={"per_page": 500})
 
     def test_get_ticket_priorities(self, mock_zammad_api: Mock) -> None:
         """Test get_ticket_priorities method."""
@@ -200,7 +200,7 @@ class TestZammadClientMethods:
 
         assert len(result) == 2
         assert result[0]["name"] == "1 low"
-        mock_instance.ticket_priority.all.assert_called_once()
+        mock_instance.ticket_priority.all.assert_called_once_with(filters={"per_page": 500})
 
     def test_search_users(self, mock_zammad_api: Mock) -> None:
         """Test search_users method."""
