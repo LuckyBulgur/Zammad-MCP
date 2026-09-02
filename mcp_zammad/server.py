@@ -103,11 +103,14 @@ CHARACTER_LIMIT = 25000  # Maximum response size per MCP best practices
 ARTICLE_BODY_TRUNCATE_LENGTH = 500  # Maximum length for article body in markdown formatting
 
 # Zammad state type IDs (from Zammad API)
+# Zammad state type ids, see db/seeds/ticket_state_types.rb in the Zammad repository.
 STATE_TYPE_NEW = 1
 STATE_TYPE_OPEN = 2
-STATE_TYPE_CLOSED = 3
-STATE_TYPE_PENDING_REMINDER = 4
-STATE_TYPE_PENDING_CLOSE = 5
+STATE_TYPE_PENDING_REMINDER = 3
+STATE_TYPE_PENDING_ACTION = 4
+STATE_TYPE_CLOSED = 5
+STATE_TYPE_MERGED = 6
+STATE_TYPE_REMOVED = 7
 
 
 # Tool annotation constants
@@ -1067,6 +1070,11 @@ class ZammadMCPServer:
                     - priority (str): Priority name (default: "2 normal")
                     - article_type (str): Article type - "note", "email", "phone" (default: "note")
                     - article_internal (bool): Whether article is internal-only (default: False)
+                    - owner (str | None): Agent login or email to assign the ticket to
+                    - tags (list[str] | None): Tags to set on the new ticket in the same request
+                    - article_subject (str | None): Subject of the initial article
+                    - article_content_type (str): "text/plain" (default, body is HTML-escaped) or
+                      "text/html" (basic markup kept, script and javascript: removed)
 
             Returns:
                 Ticket: The created ticket object with schema:
@@ -1087,6 +1095,8 @@ class ZammadMCPServer:
             Examples:
                 - Use when: "Create ticket for server outage" -> title, group, customer, article_body
                 - Use when: "New high priority ticket" -> add priority="3 high"
+                - Use when: "Create and tag it, assign to me" -> tags=["backend"], owner="me@example.com"
+                - Use when: "Body with headings and lists" -> article_content_type="text/html"
                 - Don't use when: Ticket already exists (use zammad_update_ticket)
                 - Don't use when: Only adding comment (use zammad_add_article)
 
@@ -1098,6 +1108,7 @@ class ZammadMCPServer:
             Note:
                 The customer must exist in Zammad before creating a ticket.
                 Use zammad_create_user to create new customers first.
+                Tags are created on the fly by Zammad if they do not exist yet.
             """
             client = self.get_client()
             try:
@@ -1905,10 +1916,11 @@ class ZammadMCPServer:
             Tuple of (open_increment, closed_increment, pending_increment)
 
         Note:
-            Uses state_type_id from Zammad instead of string matching:
+            Uses state_type_id from Zammad instead of string matching, so renamed or
+            localized states (for example "Abgeschlossen") are counted correctly:
             - 1 (new), 2 (open) -> open
-            - 3 (closed) -> closed
-            - 4 (pending reminder), 5 (pending close) -> pending
+            - 3 (pending reminder), 4 (pending action) -> pending
+            - 5 (closed), 6 (merged), 7 (removed) -> closed
         """
         state_type_mapping = self._get_state_type_mapping()
         state_type_id = state_type_mapping.get(state_name, 0)
@@ -1916,9 +1928,9 @@ class ZammadMCPServer:
         # Categorize based on state_type_id
         if state_type_id in [STATE_TYPE_NEW, STATE_TYPE_OPEN]:
             return (1, 0, 0)
-        if state_type_id == STATE_TYPE_CLOSED:
+        if state_type_id in [STATE_TYPE_CLOSED, STATE_TYPE_MERGED, STATE_TYPE_REMOVED]:
             return (0, 1, 0)
-        if state_type_id in [STATE_TYPE_PENDING_REMINDER, STATE_TYPE_PENDING_CLOSE]:
+        if state_type_id in [STATE_TYPE_PENDING_REMINDER, STATE_TYPE_PENDING_ACTION]:
             return (0, 0, 1)
         return (0, 0, 0)
 
@@ -2084,7 +2096,7 @@ class ZammadMCPServer:
             Note:
                 Uses pagination to scan tickets without loading all into memory.
                 May take several seconds for large ticket databases (>10k tickets).
-                State categorization uses state_type_id: new/open=open, closed=closed, pending=pending.
+                State categorization uses state_type_id: new/open=open, pending reminder/action=pending, closed/merged/removed=closed.
                 Date filtering (start_date, end_date) not yet implemented - shows warning if provided.
                 Processes up to 100,000 tickets (1000 pages x 100 per page).
             """
@@ -2157,6 +2169,8 @@ class ZammadMCPServer:
                 Results are cached in memory for performance (cleared on server restart).
                 All groups are returned in a single response (no pagination needed).
                 Use group 'name' field when creating/updating tickets, not ID.
+                Before Zammad 7.0 the groups endpoint needs admin.group; agents without it
+                get the groups from the ticket creation form instead, so the list still works.
             """
             groups = self._get_cached_groups()
 
@@ -2344,13 +2358,13 @@ class ZammadMCPServer:
                 - Don't use when: Getting tags for a specific ticket (use zammad_get_ticket_tags)
 
             Error Handling:
-                - Returns "Error: Permission denied" if user lacks admin.tag permission
                 - Returns "Error: Invalid authentication" on 401 status
                 - Returns empty list if no tags defined in system
 
             Note:
-                Requires admin.tag permission (not available to regular agents).
-                The 'count' field shows how many tickets use each tag.
+                With admin.tag the list comes from tag_list including usage counts.
+                Agents without admin.tag get the same names from tag_search; the 'count'
+                field is then null and the markdown line omits the usage.
                 Use tag 'name' field when adding tags to tickets.
             """
             client = self.get_client()
@@ -2380,8 +2394,11 @@ class ZammadMCPServer:
                 for tag in tags:
                     name = tag.get("name", "Unknown")
                     tag_id = tag.get("id", "?")
-                    count = tag.get("count", 0)
-                    lines.append(f"- **{name}** (ID: {tag_id}, used {count} times)")
+                    count = tag.get("count")
+                    if count is None:
+                        lines.append(f"- **{name}** (ID: {tag_id})")
+                    else:
+                        lines.append(f"- **{name}** (ID: {tag_id}, used {count} times)")
                 result = "\n".join(lines)
 
             return truncate_response(result)

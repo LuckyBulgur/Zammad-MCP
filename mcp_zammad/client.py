@@ -5,6 +5,7 @@ import os
 from typing import Any
 from urllib.parse import urlparse
 
+import requests  # type: ignore[import-untyped]
 from zammad_py import ZammadAPI
 from zammad_py.exceptions import ConfigException
 
@@ -192,8 +193,16 @@ class ZammadClient:
     def get_ticket(
         self, ticket_id: int, include_articles: bool = True, article_limit: int = 10, article_offset: int = 0
     ) -> dict[str, Any]:
-        """Get a single ticket by ID with optional article pagination."""
-        ticket = self.api.ticket.find(ticket_id)
+        """Get a single ticket by ID with optional article pagination.
+
+        The ticket is requested with ``expand=true`` so that ``group``, ``state``,
+        ``priority``, ``owner`` and ``customer`` arrive as names instead of being
+        absent. zammad_py's ``Ticket.find`` cannot pass query parameters, therefore
+        the request goes through the authenticated session directly.
+        """
+        response = self.api.session.get(f"{self.url}/tickets/{ticket_id}", params={"expand": "true"})
+        response.raise_for_status()
+        ticket = dict(response.json())
 
         if include_articles:
             articles = self.api.ticket.articles(ticket_id)
@@ -222,20 +231,39 @@ class ZammadClient:
         priority: str = "2 normal",
         article_type: str = "note",
         article_internal: bool = False,
+        owner: str | None = None,
+        tags: list[str] | None = None,
+        article_subject: str | None = None,
+        article_content_type: str | None = None,
     ) -> dict[str, Any]:
-        """Create a new ticket."""
-        ticket_data = {
+        """Create a new ticket.
+
+        ``owner`` is a login or e-mail address. ``tags`` are joined into the
+        comma-separated string Zammad reads from ``params[:tags]`` on creation.
+        Optional article fields are only sent when given so Zammad keeps its defaults.
+        """
+        article: dict[str, Any] = {
+            "body": article_body,
+            "type": article_type,
+            "internal": article_internal,
+        }
+        if article_subject is not None:
+            article["subject"] = article_subject
+        if article_content_type is not None:
+            article["content_type"] = article_content_type
+
+        ticket_data: dict[str, Any] = {
             "title": title,
             "group": group,
             "customer": customer,
             "state": state,
             "priority": priority,
-            "article": {
-                "body": article_body,
-                "type": article_type,
-                "internal": article_internal,
-            },
+            "article": article,
         }
+        if owner is not None:
+            ticket_data["owner"] = owner
+        if tags:
+            ticket_data["tags"] = ",".join(tags)
 
         return dict(self.api.ticket.create(ticket_data))
 
@@ -405,9 +433,30 @@ class ZammadClient:
         return list(result)
 
     def get_groups(self) -> list[dict[str, Any]]:
-        """Get all groups."""
-        result = self.api.group.all()
-        return list(result)
+        """Get all groups.
+
+        ``GET /groups`` is limited to ``admin.group`` before Zammad 7.0 and answers 403
+        for plain agents. In that case the groups are read from the ticket creation
+        form (``GET /ticket_create``), which every agent may call and which carries
+        all groups as assets. The fallback is used for 403 only; other errors are raised.
+
+        Returns:
+            List of group objects with at least id, name and active fields.
+
+        Raises:
+            requests.HTTPError: If the API request fails for a reason other than 403.
+        """
+        response = self.api.session.get(f"{self.url}/groups", params={"per_page": 500})
+        if response.status_code != requests.codes.forbidden:
+            response.raise_for_status()
+            return list(response.json())
+
+        logger.info("GET /groups answered 403, reading groups from the ticket creation form instead")
+        form_response = self.api.session.get(f"{self.url}/ticket_create")
+        form_response.raise_for_status()
+        assets = form_response.json().get("assets", {})
+        groups = list(assets.get("Group", {}).values())
+        return sorted(groups, key=lambda group: int(group.get("id", 0)))
 
     def get_ticket_states(self) -> list[dict[str, Any]]:
         """Get all ticket states."""
@@ -469,15 +518,27 @@ class ZammadClient:
         the tag_list endpoint is not exposed by the library.
 
         Note:
-            Requires admin.tag permission.
+            ``GET /tag_list`` requires admin.tag. Without it Zammad answers 403 and the
+            tags are read from ``GET /tag_search`` instead, which agents may call. That
+            endpoint knows no usage count, so ``count`` is ``None`` on the fallback path.
 
         Returns:
             List of tag objects with id, name, and count fields.
 
         Raises:
-            requests.HTTPError: If the API request fails (e.g., 403 Forbidden)
+            requests.HTTPError: If the API request fails for a reason other than 403.
         """
         # Use zammad_py's internal session for authentication
         response = self.api.session.get(f"{self.url}/tag_list")
-        response.raise_for_status()
-        return list(response.json())
+        if response.status_code != requests.codes.forbidden:
+            response.raise_for_status()
+            return list(response.json())
+
+        logger.info("GET /tag_list answered 403, reading tags from tag_search instead")
+        search_response = self.api.session.get(f"{self.url}/tag_search", params={"term": ""})
+        search_response.raise_for_status()
+        return [
+            {"id": tag.get("id"), "name": tag.get("value"), "count": None}
+            for tag in search_response.json()
+            if tag.get("value")
+        ]

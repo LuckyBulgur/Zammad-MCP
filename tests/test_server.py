@@ -839,6 +839,71 @@ def test_list_tags_tool_markdown(mock_zammad_client, decorator_capturer):
     mock_instance.list_tags.assert_called_once()
 
 
+def test_list_tags_tool_markdown_without_counts(mock_zammad_client, decorator_capturer):
+    """Tags from the tag_search fallback have no count and are listed without usage."""
+    mock_instance, _ = mock_zammad_client
+
+    mock_instance.list_tags.return_value = [
+        {"id": 3, "name": "ws2", "count": None},
+        {"id": 2, "name": "Eingeplant", "count": None},
+    ]
+
+    server_inst = ZammadMCPServer()
+    server_inst.client = mock_instance
+    test_tools, capture_tool = decorator_capturer(server_inst.mcp.tool)
+    server_inst.mcp.tool = capture_tool  # type: ignore[method-assign, assignment]
+    server_inst.get_client = lambda: server_inst.client  # type: ignore[method-assign, assignment, return-value]
+    server_inst._setup_tools()
+
+    result = test_tools["zammad_list_tags"](ListParams())
+
+    assert "Found 2 tag(s)" in result
+    assert "- **Eingeplant** (ID: 2)" in result
+    assert "- **ws2** (ID: 3)" in result
+    assert "used" not in result
+
+
+def test_create_ticket_tool_passes_tags_and_owner(mock_zammad_client, ticket_factory, decorator_capturer):
+    """The tool forwards owner, tags and article options to the client in one call."""
+    mock_instance, _ = mock_zammad_client
+    mock_instance.create_ticket.return_value = ticket_factory(id=7, title="Tagged")
+
+    server_inst = ZammadMCPServer()
+    server_inst.client = mock_instance
+    test_tools, capture_tool = decorator_capturer(server_inst.mcp.tool)
+    server_inst.mcp.tool = capture_tool  # type: ignore[method-assign, assignment]
+    server_inst.get_client = lambda: server_inst.client  # type: ignore[method-assign, assignment, return-value]
+    server_inst._setup_tools()
+
+    params = TicketCreate(
+        title="Tagged",
+        group="Support",
+        customer="customer@example.com",
+        article_body="<p>Body</p>",
+        owner="agent@example.com",
+        tags=["metronhr"],
+        article_subject="Plan",
+        article_content_type="text/html",
+    )
+    result = test_tools["zammad_create_ticket"](params)
+
+    assert result.id == 7
+    mock_instance.create_ticket.assert_called_once_with(
+        title="Tagged",
+        group="Support",
+        customer="customer@example.com",
+        article_body="<p>Body</p>",
+        state="new",
+        priority="2 normal",
+        article_type="note",
+        article_internal=False,
+        owner="agent@example.com",
+        tags=["metronhr"],
+        article_subject="Plan",
+        article_content_type="text/html",
+    )
+
+
 def test_list_tags_tool_json(mock_zammad_client, decorator_capturer):
     """Test zammad_list_tags returns canonical JSON list metadata and sorted tags."""
     mock_instance, _ = mock_zammad_client
@@ -1332,15 +1397,15 @@ def test_get_ticket_stats_tool(mock_zammad_client, decorator_capturer):
     mock_instance.get_ticket_states.return_value = [
         {"id": 1, "name": "new", "state_type_id": 1, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
         {"id": 2, "name": "open", "state_type_id": 2, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
-        {"id": 3, "name": "closed", "state_type_id": 3, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
+        {"id": 3, "name": "closed", "state_type_id": 5, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
         {
             "id": 4,
             "name": "pending reminder",
-            "state_type_id": 4,
+            "state_type_id": 3,
             "created_at": "2024-01-01",
             "updated_at": "2024-01-01",
         },
-        {"id": 5, "name": "pending close", "state_type_id": 5, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
+        {"id": 5, "name": "pending close", "state_type_id": 4, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
     ]
 
     server_inst = ZammadMCPServer()
@@ -1802,15 +1867,15 @@ def test_get_ticket_stats_pagination(decorator_capturer):
     server.client.get_ticket_states.return_value = [
         {"id": 1, "name": "new", "state_type_id": 1, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
         {"id": 2, "name": "open", "state_type_id": 2, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
-        {"id": 3, "name": "closed", "state_type_id": 3, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
+        {"id": 3, "name": "closed", "state_type_id": 5, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
         {
             "id": 4,
             "name": "pending reminder",
-            "state_type_id": 4,
+            "state_type_id": 3,
             "created_at": "2024-01-01",
             "updated_at": "2024-01-01",
         },
-        {"id": 5, "name": "pending close", "state_type_id": 5, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
+        {"id": 5, "name": "pending close", "state_type_id": 4, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
     ]
 
     # Capture tools as they're registered
@@ -3223,3 +3288,19 @@ def test_get_organization_supports_json_format(decorator_capturer):
     assert parsed["id"] == 2
     assert parsed["name"] == "ACME Corp"
     assert parsed["domain"] == "acme.com"
+
+
+def test_categorize_ticket_state_uses_zammad_state_type_ids(server_instance):
+    """Localized state names are counted by their Zammad state type, merged counts as closed."""
+    server_instance.client.get_ticket_states.return_value = [
+        {"id": 1, "name": "Neu", "state_type_id": 1, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
+        {"id": 3, "name": "Wiedervorlage", "state_type_id": 3, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
+        {"id": 4, "name": "Abgeschlossen", "state_type_id": 5, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
+        {"id": 5, "name": "merged", "state_type_id": 6, "created_at": "2024-01-01", "updated_at": "2024-01-01"},
+    ]
+
+    assert server_instance._categorize_ticket_state("Neu") == (1, 0, 0)
+    assert server_instance._categorize_ticket_state("Wiedervorlage") == (0, 0, 1)
+    assert server_instance._categorize_ticket_state("Abgeschlossen") == (0, 1, 0)
+    assert server_instance._categorize_ticket_state("merged") == (0, 1, 0)
+    assert server_instance._categorize_ticket_state("unbekannt") == (0, 0, 0)

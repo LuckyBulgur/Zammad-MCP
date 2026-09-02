@@ -4,6 +4,9 @@
 
 ### 🚀 Features
 
+- *(fork)* Accept owner, tags, article_subject and article_content_type in zammad_create_ticket
+- *(fork)* Fall back to the ticket creation form and tag_search when /groups or /tag_list answer 403
+- *(fork)* Fetch single tickets with expand=true so group, state, priority, owner and customer carry names
 - Add tag listing and retrieval tools (#174)
 - *(time-accounting)* Add time_unit support to update_ticket and add_article (#211)
 - *(deps)* Migrate from bundled FastMCP 1 to standalone FastMCP 3
@@ -11,6 +14,7 @@
 
 ### 🐛 Bug Fixes
 
+- *(fork)* Count ticket statistics with Zammad's real state type ids (5 closed, 3/4 pending, 6/7 merged/removed)
 - Address CodeRabbit review feedback
 - Resolve Codacy D-series docstring violations in changed files
 - *(tests)* Add local fake Zammad server to HTTP integration fixture

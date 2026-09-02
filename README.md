@@ -250,7 +250,7 @@ Or using Docker:
 
 **Note**: The server supports stdio (default) and HTTP transports. Stdio mode requires the `-i` flag for Docker. See the HTTP Transport section below for remote deployments.
 
-**Important**: The `-i` flag is required—without it, the MCP server cannot receive stdin. Preserve this flag in wrapper scripts or shell aliases.
+**Important**: The `-i` flag is required. Without it, the MCP server cannot receive stdin. Preserve this flag in wrapper scripts or shell aliases.
 
 Or if you have it installed locally:
 
@@ -559,6 +559,28 @@ The server respects Zammad's rate limits. If you hit rate limits:
 - Paginate large result sets
 - Cache frequently accessed data
 
+## Operating This Fork (AMNAU Helpdesk)
+
+This fork runs against `https://support.amnau.de` as the Claude Code MCP server `zammad`, started as
+`docker run --rm -i -e ZAMMAD_URL=... -e ZAMMAD_HTTP_TOKEN=... ghcr.io/luckybulgur/zammad-mcp:latest`
+(see `~/.claude.json`). Things that differ from the upstream project:
+
+- **Token permissions**: an API token with `ticket.agent` is enough. `zammad_list_groups` and
+  `zammad_list_tags` fall back to endpoints every agent may call (`/ticket_create` assets and
+  `/tag_search`) when `/groups` or `/tag_list` answer 403. Zammad opens `/groups` to agents from
+  version 7.0 on; with `admin.tag` the tag list also carries usage counts.
+- **Ticket details** are fetched with `expand=true`, so group, state, priority, owner and customer
+  arrive as names.
+- **Ticket creation** accepts `owner`, `tags`, `article_subject` and `article_content_type` in the
+  same request, so a tagged and assigned ticket needs one call.
+- **Releases**: every push to `main` publishes `ghcr.io/luckybulgur/zammad-mcp:latest` through
+  `.github/workflows/docker-publish.yml`. Docker does not refresh a cached `latest` on its own, so run
+  `docker pull ghcr.io/luckybulgur/zammad-mcp:latest` and reconnect the MCP server (`/mcp` in Claude
+  Code) after each release.
+- **Upstream sync**: `git remote add upstream https://github.com/basher83/Zammad-MCP.git`, merge
+  `upstream/main`, keep the fork's repository references and the reduced CI (docker-publish only), and
+  drop upstream's Codex triage workflows and plugin bundle, which only work in the upstream repository.
+
 ## Security
 
 The server implements multiple layers of protection following industry best practices.
@@ -586,14 +608,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code standards, te
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE) — matches the [Zammad project](https://github.com/zammad/zammad) license.
+[AGPL-3.0-or-later](LICENSE), matching the [Zammad project](https://github.com/zammad/zammad) license.
 
 ## Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — Technical design
-- [SECURITY.md](SECURITY.md) — Security policy
-- [CONTRIBUTING.md](CONTRIBUTING.md) — Development guidelines
-- [CHANGELOG.md](CHANGELOG.md) — Version history
+- [ARCHITECTURE.md](ARCHITECTURE.md): Technical design
+- [SECURITY.md](SECURITY.md): Security policy
+- [CONTRIBUTING.md](CONTRIBUTING.md): Development guidelines
+- [CHANGELOG.md](CHANGELOG.md): Version history
 
 ## Support
 

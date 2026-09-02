@@ -254,6 +254,21 @@ class Ticket(BaseModel):
     tags: list[str] | None = None
 
 
+MAX_TAG_LENGTH = 100
+
+
+def sanitize_html_body(value: str) -> str:
+    """Remove high-risk HTML constructs while preserving basic HTML markup."""
+    return value.replace("<script", "&lt;script").replace("</script", "&lt;/script").replace("javascript:", "")
+
+
+def sanitize_body_for_content_type(body: str, content_type: str) -> str:
+    """Escape a plain-text body, or strip risky constructs from an HTML body."""
+    if content_type == "text/plain":
+        return html.escape(body)
+    return sanitize_html_body(body)
+
+
 class TicketCreate(StrictBaseModel):
     """Create ticket request."""
 
@@ -265,12 +280,44 @@ class TicketCreate(StrictBaseModel):
     priority: str = Field(default="2 normal", description="Priority name (1 low, 2 normal, 3 high)", max_length=100)
     article_type: str = Field(default="note", description="Article type (note, email, phone)", max_length=50)
     article_internal: bool = Field(default=False, description="Whether the article is internal")
+    owner: str | None = Field(default=None, description="Owner login or email (agent to assign)", max_length=255)
+    tags: list[str] | None = Field(
+        default=None, description="Tags to set on the new ticket (each without commas)", max_length=50
+    )
+    article_subject: str | None = Field(default=None, description="Subject of the initial article", max_length=500)
+    article_content_type: Literal["text/plain", "text/html"] = Field(
+        default="text/plain", description="Content type of the initial article body"
+    )
 
-    @field_validator("title", "article_body")
+    @field_validator("title")
     @classmethod
-    def sanitize_html(cls, v: str) -> str:
+    def sanitize_title(cls, v: str) -> str:
         """Escape HTML to prevent XSS attacks."""
         return html.escape(v)
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, v: list[str] | None) -> list[str] | None:
+        """Reject empty tags and tags containing the comma Zammad uses as separator."""
+        if v is None:
+            return v
+        cleaned: list[str] = []
+        for tag in v:
+            stripped = tag.strip()
+            if not stripped:
+                raise ValueError("Tags must not be empty")
+            if "," in stripped:
+                raise ValueError(f"Tag '{stripped}' must not contain a comma")
+            if len(stripped) > MAX_TAG_LENGTH:
+                raise ValueError(f"Tag '{stripped[:20]}...' exceeds {MAX_TAG_LENGTH} characters")
+            cleaned.append(stripped)
+        return cleaned
+
+    @model_validator(mode="after")
+    def sanitize_article_body(self) -> "TicketCreate":
+        """Sanitize the article body according to its content type."""
+        self.article_body = sanitize_body_for_content_type(self.article_body, self.article_content_type)
+        return self
 
 
 class TicketUpdate(StrictBaseModel):
@@ -340,16 +387,8 @@ class ArticleCreate(StrictBaseModel):
     @model_validator(mode="after")
     def sanitize_body(self) -> "ArticleCreate":
         """Sanitize body content according to content type."""
-        if self.content_type == "text/plain":
-            self.body = html.escape(self.body)
-        else:
-            self.body = self._sanitize_html_body(self.body)
+        self.body = sanitize_body_for_content_type(self.body, self.content_type)
         return self
-
-    @staticmethod
-    def _sanitize_html_body(value: str) -> str:
-        """Remove high-risk HTML constructs while preserving basic HTML markup."""
-        return value.replace("<script", "&lt;script").replace("</script", "&lt;/script").replace("javascript:", "")
 
 
 class GetTicketParams(StrictBaseModel):

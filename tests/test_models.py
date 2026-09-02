@@ -38,6 +38,62 @@ class TestTicketCreate:
         )
         assert ticket.article_body == "&lt;b&gt;Bold&lt;/b&gt; and &lt;script&gt;alert(&#x27;XSS&#x27;)&lt;/script&gt;"
 
+    def test_html_body_keeps_markup_but_strips_scripts(self):
+        """With text/html the body keeps basic markup and loses script and javascript: constructs."""
+        ticket = TicketCreate(
+            title="Test ticket",
+            group="Support",
+            customer="test@example.com",
+            article_body='<h2>Ziel</h2><ul><li>Punkt</li></ul><script>alert(1)</script><a href="javascript:x">l</a>',
+            article_content_type="text/html",
+        )
+        assert ticket.article_body.startswith("<h2>Ziel</h2><ul><li>Punkt</li></ul>")
+        assert "<script" not in ticket.article_body
+        assert "javascript:" not in ticket.article_body
+
+    def test_optional_owner_tags_and_subject(self):
+        """Owner, tags and subject are accepted, tags are stripped."""
+        ticket = TicketCreate(
+            title="T",
+            group="Support",
+            customer="test@example.com",
+            article_body="B",
+            owner="agent@example.com",
+            tags=[" metronhr ", "roadmap"],
+            article_subject="Plan",
+        )
+        assert ticket.owner == "agent@example.com"
+        assert ticket.tags == ["metronhr", "roadmap"]
+        assert ticket.article_subject == "Plan"
+        dumped = ticket.model_dump(exclude_none=True, mode="json")
+        assert dumped["tags"] == ["metronhr", "roadmap"]
+        assert dumped["article_content_type"] == "text/plain"
+
+    @pytest.mark.parametrize(
+        ("tags", "message"),
+        [
+            (["a,b"], "must not contain a comma"),
+            (["  "], "must not be empty"),
+            (["x" * 101], "exceeds 100 characters"),
+        ],
+    )
+    def test_invalid_tags_rejected(self, tags, message):
+        """Tags that would break the comma-separated Zammad parameter are rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            TicketCreate(title="T", group="Support", customer="test@example.com", article_body="B", tags=tags)
+        assert message in str(exc_info.value)
+
+    def test_invalid_content_type_rejected(self):
+        """Only text/plain and text/html are valid content types."""
+        with pytest.raises(ValidationError):
+            TicketCreate(
+                title="T",
+                group="Support",
+                customer="test@example.com",
+                article_body="B",
+                article_content_type="text/markdown",
+            )
+
     def test_field_length_limits(self):
         """Test that field length limits are enforced."""
         with pytest.raises(ValidationError) as exc_info:

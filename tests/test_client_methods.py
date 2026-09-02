@@ -3,7 +3,7 @@
 import os
 import pathlib
 from collections.abc import Generator
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 import requests
@@ -111,9 +111,13 @@ class TestZammadClientMethods:
         mock_instance.ticket.update.assert_not_called()
 
     def test_get_groups(self, mock_zammad_api: Mock) -> None:
-        """Test get_groups method."""
+        """Test get_groups reads the groups endpoint when the token may use it."""
         mock_instance = Mock()
-        mock_instance.group.all.return_value = [{"id": 1, "name": "Users"}, {"id": 2, "name": "Support"}]
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status = Mock()
+        mock_response.json.return_value = [{"id": 1, "name": "Users"}, {"id": 2, "name": "Support"}]
+        mock_instance.session.get.return_value = mock_response
         mock_zammad_api.return_value = mock_instance
 
         client = ZammadClient(url="https://test.zammad.com/api/v1", http_token="test-token")
@@ -122,7 +126,53 @@ class TestZammadClientMethods:
 
         assert len(result) == 2
         assert result[0]["name"] == "Users"
-        mock_instance.group.all.assert_called_once()
+        mock_instance.session.get.assert_called_once_with(
+            "https://test.zammad.com/api/v1/groups", params={"per_page": 500}
+        )
+
+    def test_get_groups_falls_back_to_ticket_create_form_on_403(self, mock_zammad_api: Mock) -> None:
+        """Agents without admin.group (Zammad < 7.0) get the groups from the ticket form assets."""
+        mock_instance = Mock()
+        forbidden = Mock()
+        forbidden.status_code = 403
+        form = Mock()
+        form.status_code = 200
+        form.raise_for_status = Mock()
+        form.json.return_value = {
+            "assets": {
+                "Group": {
+                    "6": {"id": 6, "name": "Produktentwicklung::metronHR", "active": True},
+                    "2": {"id": 2, "name": "IT", "active": True},
+                },
+                "User": {"1": {"id": 1}},
+            }
+        }
+        mock_instance.session.get.side_effect = [forbidden, form]
+        mock_zammad_api.return_value = mock_instance
+
+        client = ZammadClient(url="https://test.zammad.com/api/v1", http_token="test-token")
+
+        result = client.get_groups()
+
+        assert [group["id"] for group in result] == [2, 6]
+        assert result[1]["name"] == "Produktentwicklung::metronHR"
+        forbidden.raise_for_status.assert_not_called()
+        assert mock_instance.session.get.call_args_list[1].args == ("https://test.zammad.com/api/v1/ticket_create",)
+
+    def test_get_groups_raises_for_other_errors(self, mock_zammad_api: Mock) -> None:
+        """Only 403 triggers the fallback; a 500 is raised as is."""
+        mock_instance = Mock()
+        failed = Mock()
+        failed.status_code = 500
+        failed.raise_for_status.side_effect = requests.HTTPError("500 Server Error")
+        mock_instance.session.get.return_value = failed
+        mock_zammad_api.return_value = mock_instance
+
+        client = ZammadClient(url="https://test.zammad.com/api/v1", http_token="test-token")
+
+        with pytest.raises(requests.HTTPError, match="500"):
+            client.get_groups()
+        mock_instance.session.get.assert_called_once()
 
     def test_get_ticket_states(self, mock_zammad_api: Mock) -> None:
         """Test get_ticket_states method."""
@@ -320,10 +370,53 @@ class TestZammadClientMethods:
         assert len(result) == 1
         mock_instance.ticket.all.assert_called_once_with(filters={"page": 1, "per_page": 25, "expand": "true"})
 
+    @staticmethod
+    def _ticket_response(payload: dict[str, object]) -> Mock:
+        """Build a session response carrying an expanded ticket."""
+        response = Mock()
+        response.status_code = 200
+        response.raise_for_status = Mock()
+        response.json.return_value = payload
+        return response
+
+    def test_get_ticket_requests_expanded_fields(self, mock_zammad_api: Mock) -> None:
+        """Test get_ticket asks Zammad for expanded names and keeps them in the result."""
+        mock_instance = Mock()
+        mock_instance.session.get.return_value = self._ticket_response(
+            {"id": 776, "title": "Test Ticket", "group": "Produktentwicklung::metronHR", "state": "open"}
+        )
+        mock_zammad_api.return_value = mock_instance
+
+        client = ZammadClient(url="https://test.zammad.com/api/v1", http_token="test-token")
+
+        result = client.get_ticket(776, include_articles=False)
+
+        assert result["group"] == "Produktentwicklung::metronHR"
+        assert result["state"] == "open"
+        assert "articles" not in result
+        mock_instance.session.get.assert_called_once_with(
+            "https://test.zammad.com/api/v1/tickets/776", params={"expand": "true"}
+        )
+        mock_instance.ticket.articles.assert_not_called()
+
+    def test_get_ticket_not_found_raises_http_error(self, mock_zammad_api: Mock) -> None:
+        """A 404 surfaces as HTTPError so the server maps it to TicketIdGuidanceError."""
+        mock_instance = Mock()
+        response = Mock()
+        response.status_code = 404
+        response.raise_for_status.side_effect = requests.HTTPError("404 Client Error: Not Found")
+        mock_instance.session.get.return_value = response
+        mock_zammad_api.return_value = mock_instance
+
+        client = ZammadClient(url="https://test.zammad.com/api/v1", http_token="test-token")
+
+        with pytest.raises(requests.HTTPError, match="Not Found"):
+            client.get_ticket(999)
+
     def test_get_ticket_with_articles(self, mock_zammad_api: Mock) -> None:
         """Test get_ticket with article pagination."""
         mock_instance = Mock()
-        mock_instance.ticket.find.return_value = {"id": 1, "title": "Test Ticket"}
+        mock_instance.session.get.return_value = self._ticket_response({"id": 1, "title": "Test Ticket"})
         mock_instance.ticket.articles.return_value = [
             {"id": 1, "body": "Article 1"},
             {"id": 2, "body": "Article 2"},
@@ -346,7 +439,7 @@ class TestZammadClientMethods:
     def test_get_ticket_all_articles(self, mock_zammad_api: Mock) -> None:
         """Test get_ticket with all articles."""
         mock_instance = Mock()
-        mock_instance.ticket.find.return_value = {"id": 1, "title": "Test Ticket"}
+        mock_instance.session.get.return_value = self._ticket_response({"id": 1, "title": "Test Ticket"})
         mock_instance.ticket.articles.return_value = [{"id": 1, "body": "Article 1"}, {"id": 2, "body": "Article 2"}]
         mock_zammad_api.return_value = mock_instance
 
@@ -387,6 +480,56 @@ class TestZammadClientMethods:
                 "article": {"body": "Please help!", "type": "email", "internal": True},
             }
         )
+
+    def test_create_ticket_with_owner_tags_and_article_options(self, mock_zammad_api: Mock) -> None:
+        """Owner, tags, subject and content type travel in the same create request."""
+        mock_instance = Mock()
+        mock_instance.ticket.create.return_value = {"id": 2, "title": "Tagged"}
+        mock_zammad_api.return_value = mock_instance
+
+        client = ZammadClient(url="https://test.zammad.com/api/v1", http_token="test-token")
+
+        client.create_ticket(
+            title="Tagged",
+            group="Support",
+            customer="customer@example.com",
+            article_body="<p>Body</p>",
+            owner="agent@example.com",
+            tags=["metronhr", "roadmap"],
+            article_subject="Plan",
+            article_content_type="text/html",
+        )
+
+        mock_instance.ticket.create.assert_called_once_with(
+            {
+                "title": "Tagged",
+                "group": "Support",
+                "customer": "customer@example.com",
+                "state": "new",
+                "priority": "2 normal",
+                "article": {
+                    "body": "<p>Body</p>",
+                    "type": "note",
+                    "internal": False,
+                    "subject": "Plan",
+                    "content_type": "text/html",
+                },
+                "owner": "agent@example.com",
+                "tags": "metronhr,roadmap",
+            }
+        )
+
+    def test_create_ticket_ignores_empty_tag_list(self, mock_zammad_api: Mock) -> None:
+        """An empty tag list must not send an empty tags parameter."""
+        mock_instance = Mock()
+        mock_instance.ticket.create.return_value = {"id": 3}
+        mock_zammad_api.return_value = mock_instance
+
+        client = ZammadClient(url="https://test.zammad.com/api/v1", http_token="test-token")
+
+        client.create_ticket(title="T", group="Support", customer="c@example.com", article_body="B", tags=[])
+
+        assert "tags" not in mock_instance.ticket.create.call_args.args[0]
 
     def test_add_article(self, mock_zammad_api: Mock) -> None:
         """Test add_article method."""
@@ -640,15 +783,48 @@ class TestZammadClientMethods:
         assert result == []
         mock_instance.session.get.assert_called_once()
 
-    def test_list_tags_permission_denied(self, mock_zammad_api: Mock) -> None:
-        """Test list_tags raises error when lacking admin.tag permission."""
+    def test_list_tags_server_error(self, mock_zammad_api: Mock) -> None:
+        """Test list_tags raises errors other than 403 unchanged."""
         mock_instance = Mock()
         mock_response = Mock()
-        mock_response.raise_for_status.side_effect = requests.HTTPError("403 Forbidden")
+        mock_response.status_code = 500
+        mock_response.raise_for_status.side_effect = requests.HTTPError("500 Server Error")
         mock_instance.session.get.return_value = mock_response
         mock_zammad_api.return_value = mock_instance
 
         client = ZammadClient(url="https://test.zammad.com/api/v1", http_token="test-token")
 
-        with pytest.raises(requests.HTTPError, match="403"):
+        with pytest.raises(requests.HTTPError, match="500"):
             client.list_tags()
+        mock_instance.session.get.assert_called_once()
+
+    def test_list_tags_falls_back_to_tag_search_on_403(self, mock_zammad_api: Mock) -> None:
+        """Agents without admin.tag get the tag names from tag_search without counts."""
+        mock_instance = Mock()
+        forbidden = Mock()
+        forbidden.status_code = 403
+        search = Mock()
+        search.status_code = 200
+        search.raise_for_status = Mock()
+        search.json.return_value = [
+            {"id": 3, "value": "ws2"},
+            {"id": 1, "value": "spam"},
+            {"id": 2, "value": "Eingeplant"},
+            {"id": 4, "value": ""},
+        ]
+        mock_instance.session.get.side_effect = [forbidden, search]
+        mock_zammad_api.return_value = mock_instance
+
+        client = ZammadClient(url="https://test.zammad.com/api/v1", http_token="test-token")
+
+        result = client.list_tags()
+
+        assert result == [
+            {"id": 3, "name": "ws2", "count": None},
+            {"id": 1, "name": "spam", "count": None},
+            {"id": 2, "name": "Eingeplant", "count": None},
+        ]
+        forbidden.raise_for_status.assert_not_called()
+        assert mock_instance.session.get.call_args_list[1] == call(
+            "https://test.zammad.com/api/v1/tag_search", params={"term": ""}
+        )
